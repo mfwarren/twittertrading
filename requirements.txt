@@ -1,2 +1,4 @@
 tweepy
 flake8
+fuzzywuzzy
+python-Levenshtein
