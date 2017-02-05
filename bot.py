@@ -32,7 +32,8 @@ class MyStreamListener(tweepy.StreamListener):
         with open('sp500.csv') as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
-                self.companies[row[1]] = row[0]
+                for company_name in row[1:]:
+                    self.companies[company_name.strip()] = row[0]
 
     def on_status(self, status):
         if status.user.id_str in FOLLOWING.values():
@@ -48,15 +49,16 @@ class MyStreamListener(tweepy.StreamListener):
 
 
 def test_parsing():
-    company_names = []
+    company_names = {}
     with open('sp500.csv') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
-            company_names.append(row[1])
-    matches = process.extract('Ford really killed it today', company_names, limit=1)
-    # assert(matches[0][0] == 'Ford Motor')
-    matches = process.extract('testing a tweet about Ford', company_names, limit=3)
-    # assert(matches[0][0] == 'Ford Motor')
+            for company_name in row[1:]:
+                company_names[company_name.strip()] = row[0]
+    matches = process.extract('Ford really killed it today', company_names.keys(), limit=1)
+    assert(company_names[matches[0][0]] == 'F')
+    matches = process.extract('testing a tweet about Ford', company_names.keys(), limit=3)
+    assert(company_names[matches[0][0]] == 'F')
     print(matches)
 
 
