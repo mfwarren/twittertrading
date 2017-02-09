@@ -42,7 +42,6 @@ class MyStreamListener(tweepy.StreamListener):
                 self.ceos[row[1]] = row[0]
                 if row[0] in self.companies:
                     # treat mentions of the ceo as synonyms of the company
-                    print(row)
                     self.companies[row[1]] = self.companies[row[0]]
 
     def on_status(self, status):
