@@ -28,12 +28,22 @@ class MyStreamListener(tweepy.StreamListener):
     def __init__(self):
         super().__init__()
         self.companies = {}
+        self.ceos = {}
 
         with open('sp500.csv') as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
                 for company_name in row[1:]:
                     self.companies[company_name.strip()] = row[0]
+
+        with open('ceos.csv') as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                self.ceos[row[1]] = row[0]
+                if row[0] in self.companies:
+                    # treat mentions of the ceo as synonyms of the company
+                    print(row)
+                    self.companies[row[1]] = self.companies[row[0]]
 
     def on_status(self, status):
         if status.user.id_str in FOLLOWING.values():
@@ -74,5 +84,5 @@ def main():
 
 
 if __name__ == '__main__':
-    # main()
-    test_parsing()
+    main()
+    # test_parsing()
