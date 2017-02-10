@@ -11,6 +11,8 @@ import os
 import tweepy
 from fuzzywuzzy import process
 
+from nltk.sentiment.vader import SentimentIntensityAnalyzer  # need to nltk.download() the vader model
+
 consumer_key = os.environ['TWITTER_CONSUMER_KEY']
 consumer_secret = os.environ['TWITTER_CONSUMER_SECRET']
 access_token = os.environ['TWITTER_ACCESS_TOKEN']
@@ -29,6 +31,7 @@ class MyStreamListener(tweepy.StreamListener):
         super().__init__()
         self.companies = {}
         self.ceos = {}
+        self.sentiment_analyzer = SentimentIntensityAnalyzer()
 
         with open('sp500.csv') as csvfile:
             reader = csv.reader(csvfile)
@@ -50,6 +53,11 @@ class MyStreamListener(tweepy.StreamListener):
             if matches[0][1] > 80:
                 print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
             print(status.text)
+            sentiment_scores = self.sentiment_analyzer.polarity_scores(status.text)
+            print(sentiment_scores)
+            for k in sorted(sentiment_scores):
+                print('{0}: {1}, '.format(k, sentiment_scores[k]), end='')
+            print()  # flush new line
 
     def on_error(self, status_code):
         if status_code == 403:
