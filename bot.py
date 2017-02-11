@@ -24,6 +24,26 @@ FOLLOWING = {
     '@matt_warren': '14304643'
 }
 
+# constants for calculating position size
+PORTFOLIO_SIZE = 1000
+RISK_PERCENTAGE = 0.01
+MAX_LEVERAGE = 5
+
+
+def amount_to_trade(portfolio_size, risk, high, low, current, buy_or_sell):
+    # this is not very sophisticated
+    # strategy is to put a stop loss on the trade such that a bad call results in at most a loss of <risk>%
+    if buy_or_sell == 'buy':
+        stop = min([low, (current - (current * risk))])
+        delta = current - stop
+    else:
+        # shorting
+        stop = min([high, (current + (current * risk))])
+        delta = stop - current
+
+    position = (portfolio_size / risk) * delta
+    return round(min(position, portfolio_size * MAX_LEVERAGE)), stop
+
 
 class MyStreamListener(tweepy.StreamListener):
 
