@@ -10,6 +10,7 @@ import os
 
 import tweepy
 from fuzzywuzzy import process
+from yahoo_finance import Share
 
 from nltk.sentiment.vader import SentimentIntensityAnalyzer  # need to nltk.download() the vader model
 
@@ -26,7 +27,7 @@ FOLLOWING = {
 
 # constants for calculating position size
 PORTFOLIO_SIZE = 1000
-RISK_PERCENTAGE = 0.01
+RISK_PERCENTAGE = 0.011
 MAX_LEVERAGE = 5
 
 
@@ -36,13 +37,15 @@ def amount_to_trade(portfolio_size, risk, high, low, current, buy_or_sell):
     if buy_or_sell == 'buy':
         stop = min([low, (current - (current * risk))])
         delta = current - stop
+        buysell = 'buy'
     else:
         # shorting
         stop = min([high, (current + (current * risk))])
         delta = stop - current
+        buysell = 'sell'
 
     position = (portfolio_size / risk) * delta
-    return round(min(position, portfolio_size * MAX_LEVERAGE)), stop
+    return round(min(position, portfolio_size * MAX_LEVERAGE)), stop, buysell
 
 
 class MyStreamListener(tweepy.StreamListener):
@@ -70,7 +73,7 @@ class MyStreamListener(tweepy.StreamListener):
     def on_status(self, status):
         if status.user.id_str in FOLLOWING.values():
             matches = process.extract(status.text, self.companies.keys(), limit=1)
-            if matches[0][1] > 80:
+            if matches[0][1] > 85:
                 print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
             print(status.text)
             sentiment_scores = self.sentiment_analyzer.polarity_scores(status.text)
@@ -79,24 +82,26 @@ class MyStreamListener(tweepy.StreamListener):
                 print('{0}: {1}, '.format(k, sentiment_scores[k]), end='')
             print()  # flush new line
 
+            # lookup current price, daily high and low
+            stock = Share(self.companies[matches[0][0]])
+            price = stock.get_price()
+            high = stock.get_days_high()
+            low = stock.get_days_low()
+
+            if sentiment_scores['neg'] > 0.75:
+                # negative sentiment on the stock, short it
+                position = amount_to_trade(PORTFOLIO_SIZE, RISK_PERCENTAGE, high, low, price, 'sell')
+
+            elif sentiment_scores['pos'] > 0.5:
+                # positive or neutral sentiment on the stock, buy it
+                position = amount_to_trade(PORTFOLIO_SIZE, RISK_PERCENTAGE, high, low, price, 'buy')
+
+            print(f'Execute Trade: {position[2]} {position[0]} of {self.companies[matches[0][0]]}, set stop loss at {position[1]}')
+
     def on_error(self, status_code):
         if status_code == 403:
             print("The request is understood, but it has been refused or access is not allowed. Limit is maybe reached")
             return False
-
-
-def test_parsing():
-    company_names = {}
-    with open('sp500.csv') as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            for company_name in row[1:]:
-                company_names[company_name.strip()] = row[0]
-    matches = process.extract('Ford really killed it today', company_names.keys(), limit=1)
-    assert(company_names[matches[0][0]] == 'F')
-    matches = process.extract('testing a tweet about Ford', company_names.keys(), limit=3)
-    assert(company_names[matches[0][0]] == 'F')
-    print(matches)
 
 
 def main():
@@ -112,4 +117,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    # test_parsing()

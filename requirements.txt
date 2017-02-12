@@ -3,3 +3,4 @@ flake8
 fuzzywuzzy
 python-Levenshtein
 nltk
+yahoo-finance
