@@ -113,7 +113,7 @@ class QuestradeClient(object):
 
     def get_symbol(self, prefix, offset=0):
         matches = self.get('v1/symbols/search', headers=self.auth_headers(), params={'prefix': prefix, 'offset': offset})
-        for m in matches['symbols']:
+        for m in matches.get('symbols', []):
             if m['symbol'] == prefix:
                 return m
         return None
