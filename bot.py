@@ -11,8 +11,9 @@ import os
 import tweepy
 from fuzzywuzzy import process
 from yahoo_finance import Share
-
 from nltk.sentiment.vader import SentimentIntensityAnalyzer  # need to nltk.download() the vader model
+
+from questrade import Order, QuestradeClient
 
 consumer_key = os.environ['TWITTER_CONSUMER_KEY']
 consumer_secret = os.environ['TWITTER_CONSUMER_SECRET']
@@ -34,18 +35,18 @@ MAX_LEVERAGE = 5
 def amount_to_trade(portfolio_size, risk, high, low, current, buy_or_sell):
     # this is not very sophisticated
     # strategy is to put a stop loss on the trade such that a bad call results in at most a loss of <risk>%
-    if buy_or_sell == 'buy':
+    if buy_or_sell == 'Buy':
         stop = min([low, (current - (current * risk))])
         delta = current - stop
-        buysell = 'buy'
+        buysell = 'Buy'
     else:
         # shorting
         stop = min([high, (current + (current * risk))])
         delta = stop - current
-        buysell = 'sell'
+        buysell = 'Short'
 
     position = (portfolio_size / risk) * delta
-    return round(min(position, portfolio_size * MAX_LEVERAGE)), stop, buysell
+    return round(min(position, portfolio_size * MAX_LEVERAGE) / current), stop, buysell
 
 
 class MyStreamListener(tweepy.StreamListener):
@@ -55,6 +56,7 @@ class MyStreamListener(tweepy.StreamListener):
         self.companies = {}
         self.ceos = {}
         self.sentiment_analyzer = SentimentIntensityAnalyzer()
+        self.questrade_client = QuestradeClient()
 
         with open('sp500.csv') as csvfile:
             reader = csv.reader(csvfile)
@@ -70,33 +72,51 @@ class MyStreamListener(tweepy.StreamListener):
                     # treat mentions of the ceo as synonyms of the company
                     self.companies[row[1]] = self.companies[row[0]]
 
+    def process_tweet(self, text):
+        matches = process.extract(text, self.companies.keys(), limit=1)
+        if matches[0][1] > 85:
+            print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
+        print(text)
+        sentiment_scores = self.sentiment_analyzer.polarity_scores(text)
+        print(sentiment_scores)
+        for k in sorted(sentiment_scores):
+            print('{0}: {1}, '.format(k, sentiment_scores[k]), end='')
+        print()  # flush new line
+
+        # lookup current price, daily high and low
+        stock = Share(self.companies[matches[0][0]])
+        price = float(stock.get_price())
+        high = float(stock.get_days_high())
+        low = float(stock.get_days_low())
+
+        if sentiment_scores['neg'] > 0.75:
+            # negative sentiment on the stock, short it
+            position = amount_to_trade(PORTFOLIO_SIZE, RISK_PERCENTAGE, high, low, price, 'Short')
+
+        elif sentiment_scores['pos'] > 0.5:
+            # positive or neutral sentiment on the stock, buy it
+            position = amount_to_trade(PORTFOLIO_SIZE, RISK_PERCENTAGE, high, low, price, 'Buy')
+
+        else:
+            position = (0, 0, 'No Order')
+
+        print(f'Execute Trade: {position[2]} {position[0]} of {self.companies[matches[0][0]]}, set stop loss at {position[1]}')
+
+        questrade_symbol = self.questrade_client.get_symbol(self.companies[matches[0][0]])
+        print(questrade_symbol)
+        if questrade_symbol:
+            order = Order(os.getenv('QUESTRADE_ACCOUNT_NUMBER'),
+                        questrade_symbol['symbolId'],
+                        position[0],
+                        None,
+                        stop_price=position[1],
+                        action=position[2])
+            trade = self.questrade_client.create_order(order)
+            print(trade)
+
     def on_status(self, status):
         if status.user.id_str in FOLLOWING.values():
-            matches = process.extract(status.text, self.companies.keys(), limit=1)
-            if matches[0][1] > 85:
-                print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
-            print(status.text)
-            sentiment_scores = self.sentiment_analyzer.polarity_scores(status.text)
-            print(sentiment_scores)
-            for k in sorted(sentiment_scores):
-                print('{0}: {1}, '.format(k, sentiment_scores[k]), end='')
-            print()  # flush new line
-
-            # lookup current price, daily high and low
-            stock = Share(self.companies[matches[0][0]])
-            price = stock.get_price()
-            high = stock.get_days_high()
-            low = stock.get_days_low()
-
-            if sentiment_scores['neg'] > 0.75:
-                # negative sentiment on the stock, short it
-                position = amount_to_trade(PORTFOLIO_SIZE, RISK_PERCENTAGE, high, low, price, 'sell')
-
-            elif sentiment_scores['pos'] > 0.5:
-                # positive or neutral sentiment on the stock, buy it
-                position = amount_to_trade(PORTFOLIO_SIZE, RISK_PERCENTAGE, high, low, price, 'buy')
-
-            print(f'Execute Trade: {position[2]} {position[0]} of {self.companies[matches[0][0]]}, set stop loss at {position[1]}')
+            self.process_tweet(status.text)
 
     def on_error(self, status_code):
         if status_code == 403:
@@ -113,6 +133,8 @@ def main():
     myStreamListener = MyStreamListener()
     myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
     myStream.filter(follow=FOLLOWING.values(), async=True)
+
+    # myStreamListener.process_tweet('apple is doing really good LOVE THEM!!')
 
 
 if __name__ == '__main__':
