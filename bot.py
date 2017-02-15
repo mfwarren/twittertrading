@@ -74,8 +74,13 @@ class MyStreamListener(tweepy.StreamListener):
 
     def process_tweet(self, text):
         matches = process.extract(text, self.companies.keys(), limit=1)
-        if matches[0][1] > 85:
+        print(text)
+        print(matches)
+        if matches[0][1] > 90:
             print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
+        else:
+            print('unable to match a company in this tweet')
+            return
         print(text)
         sentiment_scores = self.sentiment_analyzer.polarity_scores(text)
         print(sentiment_scores)
@@ -134,7 +139,9 @@ def main():
     myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
     myStream.filter(follow=FOLLOWING.values(), async=True)
 
-    # myStreamListener.process_tweet('apple is doing really good LOVE THEM!!')
+    myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
+    myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
+    myStreamListener.process_tweet('Watch Dr. David Shulkin- new @DeptVetAffairs Secretary being sworn-in by @VP Pence https://t.co/fjJOpFkqi5 https://t.co/s9ZGynLM2i')
 
 
 if __name__ == '__main__':
