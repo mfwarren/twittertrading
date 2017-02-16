@@ -137,11 +137,16 @@ def main():
 
     myStreamListener = MyStreamListener()
     myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
-    myStream.filter(follow=FOLLOWING.values(), async=True)
+    while True:
+        # my network drops and crashes the program
+        try:
+            myStream.filter(follow=FOLLOWING.values(), async=False)
+        except ReadTimeoutError:
+            pass
 
-    myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
-    myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
-    myStreamListener.process_tweet('Watch Dr. David Shulkin- new @DeptVetAffairs Secretary being sworn-in by @VP Pence https://t.co/fjJOpFkqi5 https://t.co/s9ZGynLM2i')
+    # myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
+    # myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
+    # myStreamListener.process_tweet('Watch Dr. David Shulkin- new @DeptVetAffairs Secretary being sworn-in by @VP Pence https://t.co/fjJOpFkqi5 https://t.co/s9ZGynLM2i')
 
 
 if __name__ == '__main__':
