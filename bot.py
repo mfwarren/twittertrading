@@ -12,6 +12,7 @@ import tweepy
 from fuzzywuzzy import process
 from yahoo_finance import Share
 from nltk.sentiment.vader import SentimentIntensityAnalyzer  # need to nltk.download() the vader model
+from requests.packages.urllib3.exceptions import ReadTimeoutError
 
 from questrade import Order, QuestradeClient
 
