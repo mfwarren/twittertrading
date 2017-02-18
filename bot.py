@@ -12,6 +12,7 @@ import tweepy
 from fuzzywuzzy import process
 from yahoo_finance import Share
 from nltk.sentiment.vader import SentimentIntensityAnalyzer  # need to nltk.download() the vader model
+import nltk
 from requests.packages.urllib3.exceptions import ReadTimeoutError
 
 from questrade import Order, QuestradeClient
@@ -73,7 +74,23 @@ class MyStreamListener(tweepy.StreamListener):
                     # treat mentions of the ceo as synonyms of the company
                     self.companies[row[1]] = self.companies[row[0]]
 
+    def extract_orgs(self, text):
+        tokens = nltk.tokenize.word_tokenize(text)
+        pos = nltk.pos_tag(tokens)
+        sentt = nltk.ne_chunk(pos, binary=False)
+        org = []
+        print(sentt)
+        for subtree in sentt.subtrees(filter=lambda t: t.label() == 'ORGANIZATION'):
+            for leave in subtree.leaves():
+                org.append(leave)
+        return org
+
     def process_tweet(self, text):
+        # ieer.parsed_docs('NYT_19980315')
+        organizations = self.extract_orgs(text)
+        print(organizations)
+        return
+
         matches = process.extract(text, self.companies.keys(), limit=1)
         print(text)
         print(matches)
@@ -138,16 +155,22 @@ def main():
 
     myStreamListener = MyStreamListener()
     myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
-    while True:
+
+    myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
+    myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
+    myStreamListener.process_tweet('Watch Dr. David Shulkin- new @DeptVetAffairs Secretary being sworn-in by @VP Pence https://t.co/fjJOpFkqi5 https://t.co/s9ZGynLM2i')
+    myStreamListener.process_tweet('Ford motor company had a stellar 3rd quarter')
+    # while True:
         # my network drops and crashes the program
-        try:
-            myStream.filter(follow=FOLLOWING.values(), async=False)
-        except ReadTimeoutError:
-            pass
+        # try:
+        #     myStream.filter(follow=FOLLOWING.values(), async=False)
+        # except ReadTimeoutError:
+        #     pass
 
     # myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
     # myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
     # myStreamListener.process_tweet('Watch Dr. David Shulkin- new @DeptVetAffairs Secretary being sworn-in by @VP Pence https://t.co/fjJOpFkqi5 https://t.co/s9ZGynLM2i')
+    # myStreamListener.process_tweet('Apple Inc. had a stellar 3rd quarter')
 
 
 if __name__ == '__main__':
