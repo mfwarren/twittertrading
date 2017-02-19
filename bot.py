@@ -12,7 +12,7 @@ import tweepy
 from fuzzywuzzy import process
 from yahoo_finance import Share
 from nltk.sentiment.vader import SentimentIntensityAnalyzer  # need to nltk.download() the vader model
-import nltk
+from google.cloud import language
 from requests.packages.urllib3.exceptions import ReadTimeoutError
 
 from questrade import Order, QuestradeClient
@@ -59,6 +59,7 @@ class MyStreamListener(tweepy.StreamListener):
         self.ceos = {}
         self.sentiment_analyzer = SentimentIntensityAnalyzer()
         self.questrade_client = QuestradeClient()
+        self.nlp_client = language.Client()
 
         with open('sp500.csv') as csvfile:
             reader = csv.reader(csvfile)
@@ -75,31 +76,27 @@ class MyStreamListener(tweepy.StreamListener):
                     self.companies[row[1]] = self.companies[row[0]]
 
     def extract_orgs(self, text):
-        tokens = nltk.tokenize.word_tokenize(text)
-        pos = nltk.pos_tag(tokens)
-        sentt = nltk.ne_chunk(pos, binary=False)
-        org = []
-        print(sentt)
-        for subtree in sentt.subtrees(filter=lambda t: t.label() == 'ORGANIZATION'):
-            for leave in subtree.leaves():
-                org.append(leave)
-        return org
+        document = self.nlp_client.document_from_text(text)
+        entities = document.analyze_entities()
+        org = set()
+        for entity in entities:
+            if entity.entity_type == 'ORGANIZATION':
+                matches = process.extract(text, self.companies.keys(), limit=1)
+                if matches[0][1] >= 90:
+                    print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
+                    org.add(matches[0][0])
+        return list(org)
 
     def process_tweet(self, text):
-        # ieer.parsed_docs('NYT_19980315')
         organizations = self.extract_orgs(text)
         print(organizations)
-        return
-
-        matches = process.extract(text, self.companies.keys(), limit=1)
-        print(text)
-        print(matches)
-        if matches[0][1] > 90:
-            print(f'I think this tweet is about {matches[0][0]} trading symbol: {self.companies[matches[0][0]]}')
-        else:
+        if not organizations:
             print('unable to match a company in this tweet')
             return
-        print(text)
+        if len(organizations) > 1:
+            print('tweet is about more than one company, unsure how to proceed')
+            return
+
         sentiment_scores = self.sentiment_analyzer.polarity_scores(text)
         print(sentiment_scores)
         for k in sorted(sentiment_scores):
@@ -107,7 +104,7 @@ class MyStreamListener(tweepy.StreamListener):
         print()  # flush new line
 
         # lookup current price, daily high and low
-        stock = Share(self.companies[matches[0][0]])
+        stock = Share(self.companies[organizations[0]])
         price = float(stock.get_price())
         high = float(stock.get_days_high())
         low = float(stock.get_days_low())
@@ -123,9 +120,9 @@ class MyStreamListener(tweepy.StreamListener):
         else:
             position = (0, 0, 'No Order')
 
-        print(f'Execute Trade: {position[2]} {position[0]} of {self.companies[matches[0][0]]}, set stop loss at {position[1]}')
+        print(f'Execute Trade: {position[2]} {position[0]} of {self.companies[organizations[0]]}, set stop loss at {position[1]}')
 
-        questrade_symbol = self.questrade_client.get_symbol(self.companies[matches[0][0]])
+        questrade_symbol = self.questrade_client.get_symbol(self.companies[organizations[0]])
         print(questrade_symbol)
         if questrade_symbol:
             order = Order(os.getenv('QUESTRADE_ACCOUNT_NUMBER'),
@@ -156,16 +153,13 @@ def main():
     myStreamListener = MyStreamListener()
     myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
 
-    myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
-    myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
-    myStreamListener.process_tweet('Watch Dr. David Shulkin- new @DeptVetAffairs Secretary being sworn-in by @VP Pence https://t.co/fjJOpFkqi5 https://t.co/s9ZGynLM2i')
-    myStreamListener.process_tweet('Ford motor company had a stellar 3rd quarter')
-    # while True:
+    # myStreamListener.process_tweet('Ford motor company is a AMAZING company good stuff!')
+    while True:
         # my network drops and crashes the program
-        # try:
-        #     myStream.filter(follow=FOLLOWING.values(), async=False)
-        # except ReadTimeoutError:
-        #     pass
+        try:
+            myStream.filter(follow=FOLLOWING.values(), async=False)
+        except ReadTimeoutError:
+            pass
 
     # myStreamListener.process_tweet('Remarks by President Trump at Swearing-In Ceremony for Treasury Secretary Mnuchin')
     # myStreamListener.process_tweet('Remarks by President Trump at Parent-Teacher Conference Listening Session ')
