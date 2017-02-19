@@ -47,7 +47,7 @@ def amount_to_trade(portfolio_size, risk, high, low, current, buy_or_sell):
         delta = stop - current
         buysell = 'Short'
 
-    position = (portfolio_size / risk) * delta
+    position = current * (portfolio_size * risk) / delta
     return round(min(position, portfolio_size * MAX_LEVERAGE) / current), stop, buysell
 
 
